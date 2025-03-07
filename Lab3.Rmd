@@ -4,7 +4,9 @@ subtitle: Ecosystem Science and Sustainability 330
 author:
   - name: Bailey Stender
     email: bstender100@gmail.com
-format: html
+format:
+  html:
+    self-contained: true
 editor: source
 execute:
   echo: true
