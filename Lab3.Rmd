@@ -1,0 +1,282 @@
+---
+title: "Lab3"
+subtitle: Ecosystem Science and Sustainability 330
+author:
+  - name: Bailey Stender
+    email: bstender100@gmail.com
+format: html
+editor: source
+execute:
+  echo: true
+---
+
+## install.packages("zoo")
+## install.packages("flextable")
+## libraries
+```{r}
+library(tidyverse)
+library(zoo)
+library(flextable)
+```
+
+## Question 1: Public Data
+
+*Open data is very valuable because it helps us stay up to date with current climate trends, resource management, and public health because these aspects are always changing, sometimes at a rapid rate. Open source data allows people to share important ideas that contribute to our society's understanding of the current science. When this data disappears or becomes inaccessible we are unaware of the steps we must take to protect resources and public health. Since many people do not take environmental science seriously right now we need a lot of data to create concrete arguments*
+
+## Question 2: Daily Summary
+
+```{r}
+data = read_csv('https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv')
+```
+
+```{r}
+txt <- "2022-01-01"
+class(txt)
+
+my_date <- as.Date(txt)
+class(my_date)
+```
+
+```{r}
+Colorado <- data |>
+  filter(state == "Colorado") |>
+  group_by(county) |>
+  arrange(date) |>
+  mutate(new_cases = cases - lag(cases),
+         new_deaths = deaths - lag(deaths)) |>
+  ungroup()
+
+```
+
+```{r}
+filter(Colorado, date == my_date) |>
+  slice_max(cases, n = 5) |>
+  select(Date = date, County = county, Cases = cases) |>
+  flextable() |>
+  set_caption("Most Total Cases")
+
+filter(Colorado, date == my_date) |>
+  slice_max(cases, n = 5) |>
+  select(Date = date, County = county, Cases = new_cases) |>
+  flextable() |>
+  set_caption(caption = "Most New Cases")
+```
+
+## Question 3: Normalizing Data
+## 3.2 Now, explore the data … what attributes does it have, what are the names of the columns? Do any match the COVID data we have? What are the dimensions… In a few sentences describe the data obtained after modification:
+##Some of the column names are SUMLEV, REGION, DEVISION, STATE, POPESTIMATE2021 among many more. Some of the names match the COVID data we have including COUNTY and STATE.There is 3,144 entries and 70 total columns. The data obtained after modifcation has the "Colorado" and "data" dataset combined and has all of the columns of each. "Colorado" also has new cases and new deaths. The data is combined so we can get the population data but narrow it down to just Colorado data.
+
+## 3.4 What is the range of populations seen in Colorado counties in 2021: 
+##The range of population seen in Colorado counties is 741-732,384 in 2021.
+
+
+```{r}
+library(dplyr)
+library(readr)
+library(stringr)
+pop_data = read.csv('https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv')
+pop_data <- pop_data |>
+  mutate(state_code = sprintf("%02d", STATE),
+  county_code = sprintf("%03d" , pop_data$COUNTY))
+pop_data <- pop_data |>
+  mutate(fips = paste(state_code, county_code, sep = "")) |>
+  filter(county_code != "000")
+selected_data <- pop_data %>% select(contains("NAME"), contains ("2021"))
+
+glimpse(selected_data)
+dim(selected_data)
+colnames(selected_data)
+```
+
+```{r}
+colorado_range <- selected_data |>
+  filter(STNAME == "Colorado") |>
+  pull(POPESTIMATE2021)
+colorado_range <- range(colorado_range)
+print(colorado_range)
+  
+```
+
+```{r}
+pop_data <- pop_data |>
+  mutate(fips = as.character(fips))
+combined_data <- Colorado |>
+  left_join(pop_data, by = "fips")
+combined_data <- combined_data |>
+  mutate(
+  per_capita_cum_cases = cases / POPESTIMATE2021,
+  per_capita_new_cases = new_cases / POPESTIMATE2021,
+  per_capita_new_deaths = new_deaths / POPESTIMATE2021
+  )
+head(combined_data)
+```
+
+```{r}
+txt <- "2021-01-01"
+class(txt)
+my.date <- as.Date(txt)
+class(my.date)
+
+top_cum_cases <- combined_data |>
+  filter(date == my.date) |>
+  arrange(desc(per_capita_cum_cases)) |>
+  select(STNAME, CTYNAME, per_capita_cum_cases) |>
+  head(n=5) |>
+  rename(
+    "County" = CTYNAME,
+    "State" = STNAME,
+    "Cumulative Cases Per Capita" = per_capita_cum_cases
+  )
+
+top_new_cases <- combined_data |>
+  filter(date == my.date) |>
+    select(STNAME, CTYNAME, per_capita_new_cases) |>
+  slice_max(per_capita_new_cases, n = 5) |>
+  rename(
+  "County" = CTYNAME,
+  "State" = STNAME, 
+  "New Cases Per Capita" = per_capita_new_cases
+  )
+
+flextable(top_cum_cases) |>
+  set_caption("Top 5 counties in Colorado with the most cumulative cases per capita on 2021-01-01")
+flextable(top_new_cases) |>
+  set_caption("Top 5 counties in Colorado with the most new cases per capita on 2021-01-01")
+```
+
+## Question 4 Rolling Thresholds
+## 4.1 Print a table of the top 5 counties, and, report the number that meet the watch list condition: “More than 100 new cases per 100,000 residents over the past 14 days…”
+##Every county has more than 100 new cases per 100,000 residents over the past 14 days.
+
+
+```{r}
+filter(combined_data, date >= my.date - 14) |>
+  group_by(county) |>
+  summarize(
+    total_new_cases = sum(new_cases),
+    cases_per_100k = (total_new_cases / POPESTIMATE2021) * 100000
+  ) |>
+  distinct() |>
+  slice_max(order_by = cases_per_100k, n = 5) |>
+  flextable()
+
+```
+
+## Question 5 Death Toll
+
+```{r}
+library(ggplot2)
+library(readr)
+
+population_data = read.csv('https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv')
+covid_2021 <- data |>
+  filter(state == "Colorado", date >= "2021-02-01", date <= "2021-12-31") |>
+  group_by(fips) |>
+  reframe(total_covid_deaths = sum(deaths, na.rm = TRUE))
+covid_2021 <- covid_2021 |>
+  mutate(fips = sprintf("%05d", as.integer(fips)))
+
+pop_data <- population_data |>
+  mutate(
+    state_code = sprintf("%s", STATE),  # Ensure STATE is treated as character
+    county_code = sprintf("%s", COUNTY),  # Ensure COUNTY is treated as character
+    fips = paste0(state_code, county_code)
+  ) |>
+  filter(county_code != "000") |>
+  select(fips, CTYNAME, DEATHS2021)
+
+merged_data <- covid_2021 |>
+  left_join(pop_data, by = "fips") |>
+  mutate(
+    covid_death_percentage = (total_covid_deaths / DEATHS2021) * 100) |>
+  filter(covid_death_percentage >= .20)
+
+ggplot(merged_data, aes(x = reorder(CTYNAME, covid_death_percentage), y = covid_death_percentage)) +
+  geom_col(fill = "red") +
+  coord_flip() +
+  labs(
+    title = "Counties Where Covid Deaths Were ≥20% of Total Deaths (2021)",
+    x = "County",
+    y = "Percentage of Total Deaths",
+    caption = "Data Source: NYT COVID Data & U.S. Census Bureau"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 5, hjust = 1),
+    axis.text.x = element_text(size = 12))
+```
+
+## Question 6 Multi-State
+
+```{r}
+state_covid = data %>%
+  group_by(date, state) %>%
+  summarise(cases = sum(cases)) %>%
+  filter(state %in% c('New York', "Ohio", 'Colorado', "Alabama")) %>%
+  group_by(state) %>%
+  mutate(newCases = cases - lag(cases),
+         roll = zoo::rollmean(newCases, k = 7, align = "right", fill = NA)) |>
+  ungroup()
+``` 
+
+
+```{r}
+ggplot(state_covid, aes(x = date)) +
+  geom_col(aes(y = newCases), fill = "pink", col = NA) +
+  geom_line(aes(y = roll), col = "darkred", size = 1) +
+  theme_linedraw() +
+  facet_wrap(~state, nrow = 2, scales = "free_y") +
+  labs(title = "Cumulative COVID-19 Cases",
+       x = "Date", y = "Case Count")
+```
+
+
+```{r}
+population_data = read.csv('https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv')
+pp = population_data %>%
+  group_by(STNAME) |>
+  summarise(state_pop =
+sum(POPESTIMATE2021)) |>
+  inner_join(state_covid, by = c("STNAME"="state")) %>%
+  mutate(perCap = newCases / state_pop) %>%
+  group_by(STNAME) %>%
+  mutate(roll = zoo::rollmean(perCap, k = 7, align = "right", fill = NA)) %>%
+  ungroup()
+```
+
+
+```{r}
+ggplot(pp, aes(x = date)) +
+  geom_line(aes(y = roll, col = STNAME), size = 1) +
+  theme_linedraw() +
+  labs(title = "Cumulative COVID-19 Cases",
+       x = "Date", y = "Case Count")
+```
+
+## Question 7: Space and Time
+##7.1 In a few sentences, describe the movement of the COVID-19 weighted mean throughout the USA and possible drivers of its movement given your knowledge of the outbreak hot spots.
+##It seems as though it started in Missisipi or Arkansa.It then seems like there was a mass spread to Cincinati. From there it trickled across the west.
+
+
+```{r}
+
+meta = read_csv('https://raw.githubusercontent.com/mikejohnson51/csu-ess-330/refs/heads/main/resources/county-centroids.csv') %>%
+  inner_join(data) %>%
+  group_by(date) %>%
+  summarise(wmX_c = sum(LON*cases) / sum(cases),
+            wmY_c = sum(LAT*cases) / sum(cases),
+            cases = sum(cases)) %>%
+    arrange(date) |>
+    mutate(d = 1:n())
+  
+  ggplot(meta) +
+    borders("state",fill = "gray90", colour = "white") +
+    geom_point(aes(x = wmX_c, y = wmY_c, size = cases), color = "red", alpha =.25) +
+    theme_linedraw()+
+    labs(color = "Time",
+         size = "Cases",
+         x = "", y = "", 
+         title = "Weighted Center of COVID-19 Cases") +
+    theme(legend.position = "none")
+  
+```

@@ -1,0 +1,152 @@
+---
+title: "Lab3"
+format: html
+author: Bailey Stender
+editor: visual
+---
+
+## install.packages("zoo")
+## install.packages("flextable")
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+library(tidyverse)
+library(zoo)
+library(flextable)
+```
+
+## Question 1: Public Data
+
+*Take a moment to reflect on the value of open data: How does easy access to historical and real-time environmental data shape our understanding of climate trends, resource management, and public health? What happens when this data disappears or becomes inaccessible? The role of independent archiving and collaborative stewardship has never been more critical in ensuring scientific progress and accountability.*
+
+-Open data is very valuable because it helps us stay up to date with current climate trends, resource management, and public health because these aspects are always changing, sometimes at a rapid rate. Open source data allows people to share important ideas that contribute to our society's understanding of the current science. When this data dissapears or becomes inaccessible we are unaware of the steps we must take to protect resources and public health. Since many people do not take environmental science seriously right now we need a lot of data to create concrete arguments.
+
+## Question 2: Daily Summary
+
+```{r}
+library(tidyverse)
+library(flextable)
+data = read_csv('https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv')
+```
+
+```{r}
+txt <- "2022-01-01"
+class(txt)
+
+my_date <- as.Date(txt)
+class(my_date)
+```
+
+```{r}
+Colorado <- data |>
+  filter(state == "Colorado") |>
+  group_by(county) |>
+  arrange(date) |>
+  mutate(new_cases = cases - lag(cases),
+         new_deaths = deaths - log(deaths)) |>
+  ungroup()
+
+```
+
+## Question 3:
+```{r}
+filter(Colorado, date == my_date) |>
+  slice_max(cases, n = 5) |>
+  select(Date = date, County = county, Cases = cases) |>
+  flextable() |>
+  set_caption("Most Total Cases")
+
+filter(Colorado, date == my_date) |>
+  slice_max(cases, n = 5) |>
+  select(Date = date, County = county, Cases = new_cases) |>
+  flextable() |>
+  set_caption(caption = "Most New Cases")
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(flextable)
+library(skimr)
+
+# Step 1: Read in the population data from the URL
+pop_url <- 'https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/counties/totals/co-est2023-alldata.csv'
+population_data <- read.csv(pop_url)
+
+# Step 2: Check the column names to ensure we are using the correct ones
+colnames(population_data)  # Check for 'STATE' and 'COUNTY' or their equivalents
+
+# Step 3: Modify population data
+# Convert STATE and COUNTY to character with leading zeros
+population_data$STATE <- sprintf("%02d", population_data$STATE)  # Format state with leading zero
+population_data$COUNTY <- sprintf("%03d", population_data$COUNTY)  # Format county with leading zero
+
+# Create the FIP variable by concatenating STATE and COUNTY
+population_data$FIP <- paste0(population_data$STATE, population_data$COUNTY)
+
+# Step 4: Select relevant columns and filter out state-level rows (COUNTY FIP == "000")
+population_data <- population_data %>%
+  select(contains("NAME"), contains("2021")) %>%
+  filter(COUNTY != "000")  # Remove rows where COUNTY == "000" (state level)
+
+# Step 5: Explore the data
+# View the column names, structure, and other summary statistics
+colnames(population_data)  # Check column names
+dim(population_data)       # Check the dimensions (rows x columns)
+str(population_data)       # Get a structure overview
+glimpse(population_data)   # Get a quick summary of the dataset
+skim(population_data)      # Skim the data for a detailed summary
+
+# Step 6: Range of populations in Colorado counties in 2021
+range(population_data$X2021)  # Find the range of population in 2021
+
+# Step 7: Join population data with COVID data (assuming COVID data is already loaded)
+# Example: Assuming you have a COVID dataset (you need to load it first)
+# covid_data <- read.csv("path_to_your_covid_data.csv")
+
+# Join the population data with the COVID data on FIP
+covid_data <- covid_data %>%
+  left_join(population_data, by = "FIP")
+
+# Step 8: Calculate per capita values
+covid_data <- covid_data %>%
+  mutate(
+    per_capita_cumulative_cases = cumulative_cases / X2021,
+    per_capita_new_cases = new_cases / X2021,
+    per_capita_new_deaths = new_deaths / X2021
+  )
+
+# Step 9: Find the top 5 counties with the most cumulative cases per capita
+top_cumulative_cases <- covid_data %>%
+  filter(date == "2021-01-01") %>%
+  arrange(desc(per_capita_cumulative_cases)) %>%
+  head(5) %>%
+  select(NAME, per_capita_cumulative_cases)
+
+# Step 10: Find the top 5 counties with the most new cases per capita
+top_new_cases <- covid_data %>%
+  filter(date == "2021-01-01") %>%
+  arrange(desc(per_capita_new_cases)) %>%
+  head(5) %>%
+  select(NAME, per_capita_new_cases)
+
+# Step 11: Display the tables using flextable
+top_cumulative_cases_ft <- flextable(top_cumulative_cases) %>%
+  set_caption("Top 5 Counties with Most Cumulative Cases per Capita (2021-01-01)")
+
+top_new_cases_ft <- flextable(top_new_cases) %>%
+  set_caption("Top 5 Counties with Most New Cases per Capita (2021-01-01)")
+
+# View the tables
+top_cumulative_cases_ft
+top_new_cases_ft
+
+      
+
+range(population_data$X2021)
+
+```
+
+
